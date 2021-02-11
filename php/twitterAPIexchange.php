@@ -407,4 +407,17 @@ class TwitterAPIExchange
     {
         return $this->httpStatusCode;
     }
+
+    public function testIssue70()
+    {
+        $url    = 'https://api.twitter.com/1.1/users/lookup.json';
+        $method = 'POST';
+        $params = array(
+            'screen_name' => 'lifehacker'
+        );
+
+        $data = $this->exchange->request($url, $method, $params);
+        $this->assertContains('created_at', $data);
+    }
+
 }

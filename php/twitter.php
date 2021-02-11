@@ -13,9 +13,8 @@ $settings = array(
 );
 
 $url = 'https://api.twitter.com/1.1/search/tweets.json';
-$getfield = '?q=#'.$hashtag.' AND -filter:retweets AND -filter:replies&lang=en&count=20&tweet_mode=extended';
+$getfield = '?q=#'.$hashtag.' AND -filter:retweets AND -filter:replies&lang=en&count=2&tweet_mode=extended';
 $requestMethod = 'GET';
-
 $twitter = new TwitterAPIExchange($settings);
 $response = $twitter->setGetfield($getfield)
      ->buildOauth($url, $requestMethod)
