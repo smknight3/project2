@@ -202,7 +202,7 @@ function drawWordCloud(text_string) {
         })])
         .range([10, 100]);
 
-    cloud().size([width, height])
+    d3.layout.cloud().size([width, height])
         .timeInterval(20)
         .words(word_entries)
         .fontSize(function(d) { return xScale(+d.value); })
@@ -235,99 +235,31 @@ function drawWordCloud(text_string) {
 }
 
 function wordblob() {
-    var noop = { value: () => {} };
-
-    function dispatch() {
-        for (var i = 0, n = arguments.length, _ = {}, t; i < n; ++i) {
-            if (!(t = arguments[i] + "") || (t in _) || /[\s.]/.test(t)) throw new Error("illegal type: " + t);
-            _[t] = [];
-        }
-        return new Dispatch(_);
-    }
-
-    function Dispatch(_) {
-        this._ = _;
-    }
-
-    function parseTypenames(typenames, types) {
-        return typenames.trim().split(/^|\s+/).map(function(t) {
-            var name = "",
-                i = t.indexOf(".");
-            if (i >= 0) name = t.slice(i + 1), t = t.slice(0, i);
-            if (t && !types.hasOwnProperty(t)) throw new Error("unknown type: " + t);
-            return { type: t, name: name };
-        });
-    }
-
-    Dispatch.prototype = dispatch.prototype = {
-        constructor: Dispatch,
-        on: function(typename, callback) {
-            var _ = this._,
-                T = parseTypenames(typename + "", _),
-                t,
-                i = -1,
-                n = T.length;
-
-            // If no callback was specified, return the callback of the given type and name.
-            if (arguments.length < 2) {
-                while (++i < n)
-                    if ((t = (typename = T[i]).type) && (t = get(_[t], typename.name))) return t;
-                return;
-            }
-
-            // If a type was specified, set the callback for the given type and name.
-            // Otherwise, if a null callback was specified, remove callbacks of the given name.
-            if (callback != null && typeof callback !== "function") throw new Error("invalid callback: " + callback);
-            while (++i < n) {
-                if (t = (typename = T[i]).type) _[t] = set(_[t], typename.name, callback);
-                else if (callback == null)
-                    for (t in _) _[t] = set(_[t], typename.name, null);
-            }
-
-            return this;
-        },
-        copy: function() {
-            var copy = {},
-                _ = this._;
-            for (var t in _) copy[t] = _[t].slice();
-            return new Dispatch(copy);
-        },
-        call: function(type, that) {
-            if ((n = arguments.length - 2) > 0)
-                for (var args = new Array(n), i = 0, n, t; i < n; ++i) args[i] = arguments[i + 2];
-            if (!this._.hasOwnProperty(type)) throw new Error("unknown type: " + type);
-            for (t = this._[type], i = 0, n = t.length; i < n; ++i) t[i].value.apply(that, args);
-        },
-        apply: function(type, that, args) {
-            if (!this._.hasOwnProperty(type)) throw new Error("unknown type: " + type);
-            for (var t = this._[type], i = 0, n = t.length; i < n; ++i) t[i].value.apply(that, args);
-        }
+    d3.rebind = function(target, source) {
+        var i = 1,
+            n = arguments.length,
+            method;
+        while (++i < n) target[method = arguments[i]] = d3_rebind(target, source, source[method]);
+        return target;
     };
 
-    function get(type, name) {
-        for (var i = 0, n = type.length, c; i < n; ++i) {
-            if ((c = type[i]).name === name) {
-                return c.value;
-            }
-        }
+    d3.functor = function functor(v) {
+        return typeof v === "function" ? v : function() {
+            return v;
+        };
+    };
+
+    // Method is assumed to be a standard D3 getter-setter:
+    // If passed with no arguments, gets the value.
+    // If passed with arguments, sets the value and returns the target.
+    function d3_rebind(target, source, method) {
+        return function() {
+            var value = method.apply(source, arguments);
+            return value === source ? target : value;
+        };
     }
 
-    function set(type, name, callback) {
-        for (var i = 0, n = type.length; i < n; ++i) {
-            if (type[i].name === name) {
-                type[i] = noop, type = type.slice(0, i).concat(type.slice(i + 1));
-                break;
-            }
-        }
-        if (callback != null) type.push({ name: name, value: callback });
-        return type;
-    }
-
-    var cloudRadians = Math.PI / 180,
-        cw = 1 << 11 >> 5,
-        ch = 1 << 11;
-
-    function exports() {
+    function cloud() {
         var size = [256, 256],
             text = cloudText,
             font = cloudFont,
@@ -339,19 +271,12 @@ function wordblob() {
             spiral = archimedeanSpiral,
             words = [],
             timeInterval = Infinity,
-            event = dispatch("word", "end"),
+            event = d3.dispatch("word", "end"),
             timer = null,
-            random = Math.random,
-            cloud = {},
-            canvas = cloudCanvas;
-
-        cloud.canvas = function(_) {
-            return arguments.length ? (canvas = functor(_), cloud) : canvas;
-        };
+            cloud = {};
 
         cloud.start = function() {
-            var contextAndRatio = getContext(canvas()),
-                board = zeroArray((size[0] >> 5) * size[1]),
+            var board = zeroArray((size[0] >> 5) * size[1]),
                 bounds = null,
                 n = words.length,
                 i = -1,
@@ -374,12 +299,13 @@ function wordblob() {
             return cloud;
 
             function step() {
-                var start = Date.now();
-                while (Date.now() - start < timeInterval && ++i < n && timer) {
-                    var d = data[i];
-                    d.x = (size[0] * (random() + .5)) >> 1;
-                    d.y = (size[1] * (random() + .5)) >> 1;
-                    cloudSprite(contextAndRatio, d, data, i);
+                var start = +new Date,
+                    d;
+                while (+new Date - start < timeInterval && ++i < n && timer) {
+                    d = data[i];
+                    d.x = (size[0] * (Math.random() + .5)) >> 1;
+                    d.y = (size[1] * (Math.random() + .5)) >> 1;
+                    cloudSprite(d, data, i);
                     if (d.hasText && place(board, d, bounds)) {
                         tags.push(d);
                         event.call("word", cloud, d);
@@ -405,18 +331,11 @@ function wordblob() {
             return cloud;
         };
 
-        function getContext(canvas) {
-            canvas.width = canvas.height = 1;
-            var ratio = Math.sqrt(canvas.getContext("2d").getImageData(0, 0, 1, 1).data.length >> 2);
-            canvas.width = (cw << 5) / ratio;
-            canvas.height = ch / ratio;
-
-            var context = canvas.getContext("2d");
-            context.fillStyle = context.strokeStyle = "red";
-            context.textAlign = "center";
-
-            return { context: context, ratio: ratio };
-        }
+        cloud.timeInterval = function(x) {
+            if (!arguments.length) return timeInterval;
+            timeInterval = x == null ? Infinity : x;
+            return cloud;
+        };
 
         function place(board, tag, bounds) {
             var perimeter = [{ x: 0, y: 0 }, { x: size[0], y: size[1] }],
@@ -424,7 +343,7 @@ function wordblob() {
                 startY = tag.y,
                 maxDelta = Math.sqrt(size[0] * size[0] + size[1] * size[1]),
                 s = spiral(size),
-                dt = random() < .5 ? 1 : -1,
+                dt = Math.random() < .5 ? 1 : -1,
                 t = -dt,
                 dxdy,
                 dx,
@@ -434,7 +353,7 @@ function wordblob() {
                 dx = ~~dxdy[0];
                 dy = ~~dxdy[1];
 
-                if (Math.min(Math.abs(dx), Math.abs(dy)) >= maxDelta) break;
+                if (Math.min(dx, dy) > maxDelta) break;
 
                 tag.x = startX + dx;
                 tag.y = startY + dy;
@@ -468,61 +387,69 @@ function wordblob() {
             return false;
         }
 
-        cloud.timeInterval = function(_) {
-            return arguments.length ? (timeInterval = _ == null ? Infinity : _, cloud) : timeInterval;
+        cloud.words = function(x) {
+            if (!arguments.length) return words;
+            words = x;
+            return cloud;
         };
 
-        cloud.words = function(_) {
-            return arguments.length ? (words = _, cloud) : words;
+        cloud.size = function(x) {
+            if (!arguments.length) return size;
+            size = [+x[0], +x[1]];
+            return cloud;
         };
 
-        cloud.size = function(_) {
-            return arguments.length ? (size = [+_[0], +_[1]], cloud) : size;
+        cloud.font = function(x) {
+            if (!arguments.length) return font;
+            font = d3.functor(x);
+            return cloud;
         };
 
-        cloud.font = function(_) {
-            return arguments.length ? (font = functor(_), cloud) : font;
+        cloud.fontStyle = function(x) {
+            if (!arguments.length) return fontStyle;
+            fontStyle = d3.functor(x);
+            return cloud;
         };
 
-        cloud.fontStyle = function(_) {
-            return arguments.length ? (fontStyle = functor(_), cloud) : fontStyle;
+        cloud.fontWeight = function(x) {
+            if (!arguments.length) return fontWeight;
+            fontWeight = d3.functor(x);
+            return cloud;
         };
 
-        cloud.fontWeight = function(_) {
-            return arguments.length ? (fontWeight = functor(_), cloud) : fontWeight;
+        cloud.rotate = function(x) {
+            if (!arguments.length) return rotate;
+            rotate = d3.functor(x);
+            return cloud;
         };
 
-        cloud.rotate = function(_) {
-            return arguments.length ? (rotate = functor(_), cloud) : rotate;
+        cloud.text = function(x) {
+            if (!arguments.length) return text;
+            text = d3.functor(x);
+            return cloud;
         };
 
-        cloud.text = function(_) {
-            return arguments.length ? (text = functor(_), cloud) : text;
+        cloud.spiral = function(x) {
+            if (!arguments.length) return spiral;
+            spiral = spirals[x + ""] || x;
+            return cloud;
         };
 
-        cloud.spiral = function(_) {
-            return arguments.length ? (spiral = spirals[_] || _, cloud) : spiral;
+        cloud.fontSize = function(x) {
+            if (!arguments.length) return fontSize;
+            fontSize = d3.functor(x);
+            return cloud;
         };
 
-        cloud.fontSize = function(_) {
-            return arguments.length ? (fontSize = functor(_), cloud) : fontSize;
+        cloud.padding = function(x) {
+            if (!arguments.length) return padding;
+            padding = d3.functor(x);
+            return cloud;
         };
 
-        cloud.padding = function(_) {
-            return arguments.length ? (padding = functor(_), cloud) : padding;
-        };
 
-        cloud.random = function(_) {
-            return arguments.length ? (random = _, cloud) : random;
-        };
-
-        cloud.on = function() {
-            var value = event.on.apply(event, arguments);
-            return value === event ? cloud : value;
-        };
-
-        return cloud;
-    };
+        return d3.rebind(cloud, event, "on");
+    }
 
     function cloudText(d) {
         return d.text;
@@ -550,11 +477,8 @@ function wordblob() {
 
     // Fetches a monochrome sprite bitmap for the specified text.
     // Load in batches for speed.
-    function cloudSprite(contextAndRatio, d, data, di) {
+    function cloudSprite(d, data, di) {
         if (d.sprite) return;
-        var c = contextAndRatio.context,
-            ratio = contextAndRatio.ratio;
-
         c.clearRect(0, 0, (cw << 5) / ratio, ch / ratio);
         var x = 0,
             y = 0,
@@ -713,20 +637,34 @@ function wordblob() {
         return a;
     }
 
-    function cloudCanvas() {
-        return document.createElement("canvas");
+    var cloudRadians = Math.PI / 180,
+        cw = 1 << 11 >> 5,
+        ch = 1 << 11,
+        canvas,
+        ratio = 1;
+
+    if (typeof document !== "undefined") {
+        canvas = document.createElement("canvas");
+        canvas.width = 1;
+        canvas.height = 1;
+        ratio = Math.sqrt(canvas.getContext("2d").getImageData(0, 0, 1, 1).data.length >> 2);
+        canvas.width = (cw << 5) / ratio;
+        canvas.height = ch / ratio;
+    } else {
+        // Attempt to use node-canvas.
+        canvas = new Canvas(cw << 5, ch);
     }
 
-    function functor(d) {
-        return typeof d === "function" ? d : function() { return d; };
-    }
+    var c = canvas.getContext("2d"),
+        spirals = {
+            archimedean: archimedeanSpiral,
+            rectangular: rectangularSpiral
+        };
+    c.fillStyle = c.strokeStyle = "red";
+    c.textAlign = "center";
 
-    var spirals = {
-        archimedean: archimedeanSpiral,
-        rectangular: rectangularSpiral
-    };
-
-    exports();
+    if (typeof module === "object" && module.exports) module.exports = cloud;
+    else(d3.layout || (d3.layout = {})).cloud = cloud;
 };
 
 

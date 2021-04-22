@@ -13,12 +13,23 @@ $settings = array(
 );
 
 $url = 'https://api.twitter.com/1.1/search/tweets.json';
-$getfield = '?q=#'.$hashtag.' AND -filter:retweets AND -filter:replies&lang=en&count=2&tweet_mode=extended';
+$getfield = '?q='.$hashtag.' AND -filter:retweets AND -filter:replies&lang=en&count=20&tweet_mode=extended&result_type=popular';
+// $getfield = '?q='.$hashtag.'&lang=en&result_type=popular';
 $requestMethod = 'GET';
 $twitter = new TwitterAPIExchange($settings);
-$response = $twitter->setGetfield($getfield)
-     ->buildOauth($url, $requestMethod)
-     ->performRequest();
+$response = $twitter->setGetfield($getfield)    
+    ->buildOauth($url, $requestMethod)
+    ->performRequest();
 
-echo $response;
+echo $response; 
+
+
+// // for ($x = 0; $x <= 10; $x++) {
+    // $response = $twitter->setGetfield($getfield)
+    //     ->buildOauth($url, $requestMethod)
+    //     ->performRequest();
+//     array_push ($array, $response)
+// //   }
+// echo $array;
+
 ?>
